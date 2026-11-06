@@ -6070,6 +6070,7 @@ impl Host {
                 self.native.trim();
                 self.context.ui.scene.borrow_mut().rest();
                 self.context.ui.semantics.borrow_mut().rest();
+                zgx::theme::Themes::of(&self.context.ui.runtime).rest();
                 release_freed_heap();
             }
         }
