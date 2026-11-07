@@ -5501,3 +5501,43 @@ fn a_pointer_event_says_where_and_the_keys_held() {
         "{said}"
     );
 }
+
+#[test]
+fn a_scroll_view_says_how_a_field_rides_the_keyboard() {
+    use zgx::elastic::KeyboardRide;
+    let ride = |code: &str| {
+        let mut h = Harness::inline(code);
+        h.frames(2);
+        assert_eq!(h.host.error().get(), None);
+        h.ui.scroll_driver_at(100., 100.)
+            .expect("the scroll view")
+            .keyboard_ride()
+    };
+    let tall = r#"ui.div { h = 2000 }"#;
+    // UIKit's own unless it says otherwise.
+    assert_eq!(
+        ride(&format!("return ui.scroll {{ w = 200, h = 200, {tall} }}")),
+        KeyboardRide::Native
+    );
+    assert_eq!(
+        ride(&format!(
+            r#"return ui.scroll {{ w = 200, h = 200, keyboard_ride = "attached", {tall} }}"#
+        )),
+        KeyboardRide::Attached
+    );
+    let wrong = zgx_script::testing::TestApp::try_new(|runtime| {
+        zgx_script::ScriptHost::inline(
+            runtime,
+            "app",
+            r#"return ui.scroll { keyboard_ride = "glued" }"#,
+        )
+    });
+    assert!(
+        wrong
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.contains("keyboard_ride")),
+        "{:?}",
+        wrong.err()
+    );
+}

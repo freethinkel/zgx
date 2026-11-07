@@ -2883,6 +2883,7 @@ fn kind_view(
             follow,
             scrollbar,
             contain,
+            ride,
             padding,
         } => {
             let offset = match offset {
@@ -2902,6 +2903,10 @@ fn kind_view(
                 view.overscroll_contain()
             } else {
                 view
+            };
+            let view = match ride {
+                Some(ride) => view.keyboard_ride(*ride),
+                None => view,
             };
             let view = match padding {
                 Some(padding) => with_scroll_padding(view, padding, vm),
