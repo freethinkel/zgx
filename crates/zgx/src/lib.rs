@@ -159,9 +159,46 @@ pub fn deep<R>(level: u32, f: impl FnOnce() -> R) -> R {
     }
     #[cfg(not(any(target_os = "ios", all(test, unix))))]
     if stack_low(level) {
-        stacker::grow(STACK_SEGMENT, f)
+        stack_count::grown(|| stacker::grow(STACK_SEGMENT, f))
     } else {
         f()
+    }
+}
+/// MEASUREMENT ONLY (not for main): with `ZGX_STACK_COUNT=1`, how many
+/// `stacker` segments `deep` makes, the time spent on them, and the least
+/// stack left at a check, printed as they change.
+pub(crate) mod stack_count {
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
+    static GROWN: AtomicU64 = AtomicU64::new(0);
+    static MICROS: AtomicU64 = AtomicU64::new(0);
+    static LEAST: AtomicUsize = AtomicUsize::new(usize::MAX);
+    fn on() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("ZGX_STACK_COUNT").is_some())
+    }
+    pub(crate) fn left(left: Option<usize>) {
+        if !on() {
+            return;
+        }
+        let left = left.unwrap_or(0);
+        let least = LEAST.load(Relaxed);
+        if left + 16 * 1024 < least || (least == usize::MAX) {
+            LEAST.store(left, Relaxed);
+            eprintln!("STACK least_left={left}");
+        }
+    }
+    pub(crate) fn grown<R>(f: impl FnOnce() -> R) -> R {
+        if !on() {
+            return f();
+        }
+        let start = std::time::Instant::now();
+        let r = f();
+        let n = GROWN.fetch_add(1, Relaxed) + 1;
+        let us = MICROS.fetch_add(start.elapsed().as_micros() as u64, Relaxed);
+        if n.is_power_of_two() || n % 1000 == 0 {
+            eprintln!("STACK grown={n} micros_inside={us}");
+        }
+        r
     }
 }
 /// Whether level `level` of a recursion should go on a fresh stack segment
@@ -171,7 +208,11 @@ pub(crate) fn stack_low(level: u32) -> bool {
     #[cfg(any(target_os = "ios", all(test, unix)))]
     let left = segment::remaining;
     #[cfg(not(any(target_os = "ios", all(test, unix))))]
-    let left = stacker::remaining_stack;
+    let left = || {
+        let left = stacker::remaining_stack();
+        stack_count::left(left);
+        left
+    };
     level.is_multiple_of(4) && left().is_none_or(|left| left < 256 * 1024)
 }
 /// The stack a recursion goes on when the thread's runs low (`deep`).
@@ -187,7 +228,7 @@ pub(crate) fn on_segment<R>(f: impl FnOnce() -> R) -> R {
 #[cfg(not(any(target_os = "ios", all(test, unix))))]
 #[inline(always)]
 pub(crate) fn on_segment<R>(f: impl FnOnce() -> R) -> R {
-    stacker::grow(STACK_SEGMENT, f)
+    stack_count::grown(|| stacker::grow(STACK_SEGMENT, f))
 }
 
 /// The segment each thread keeps for `deep`, on iOS, whose main thread has
