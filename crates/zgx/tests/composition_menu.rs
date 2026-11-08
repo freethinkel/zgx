@@ -574,3 +574,40 @@ fn a_menu_in_a_popup_window_names_its_trigger_while_open() {
     assert!(ui.scene.borrow().popups().is_empty());
     assert_eq!(ui.scene.borrow().popup_anchor(root), None);
 }
+
+/// On Linux a menu takes GNOME's shape (libadwaita's): its panel rounded 15
+/// holding its items 6 in, each 32 tall and rounded 9. Elsewhere zgx's.
+#[cfg(not(windows))]
+#[test]
+fn a_menu_takes_gnomes_shape_on_linux() {
+    use zgx::scene::NodeKind;
+    let mut ui = Ui::new(500., 400.);
+    let open = ui.signal(true);
+    let view = ui.mount(
+        column().p(20.).child(
+            menu("Edit", open, button().id("anchor").size(80., 28.))
+                .id("panel")
+                .child(menu_item("Cut").id("cut")),
+        ),
+    );
+    ui.prepare_frame();
+    ui.prepare_frame();
+    let scene = ui.scene.borrow();
+    let panel = view.find("panel").unwrap();
+    let cut = view.find("cut").unwrap();
+    let (panel_box, item) = (scene.bounds(panel), scene.bounds(cut));
+    let radius = |node| match scene.kind(node) {
+        NodeKind::Panel { quad, .. } => quad.radius,
+        other => panic!("{other:?}"),
+    };
+    let inset = (item.x - panel_box.x, item.y - panel_box.y);
+    if cfg!(target_os = "linux") {
+        assert_eq!(radius(panel), 15.);
+        assert_eq!(inset, (6., 6.));
+        assert_eq!(item.height, 32., "GTK's min-height");
+        assert_eq!(radius(cut), 9.);
+    } else {
+        assert_eq!(radius(panel), 6., "radius.md");
+        assert_eq!(inset, (16., 16.));
+    }
+}
