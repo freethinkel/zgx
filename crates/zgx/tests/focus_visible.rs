@@ -443,3 +443,47 @@ fn a_popover_its_triggers_click_opens_runs_that_click_once() {
     assert!(!open.get());
     assert_eq!((clicks.get(), ups.get()), (1, 1), "no second handler");
 }
+
+/// On Linux keyboard focus is GNOME's: an outline 2 wide inset over the
+/// control (offset −2), bordered or not, its border left as it was.
+/// Elsewhere (but Windows) the ring is zgx's inset stroke.
+#[cfg(not(windows))]
+#[test]
+fn keyboard_focus_rings_the_control_as_gnome_does_on_linux() {
+    use zgx::scene::NodeKind;
+    let mut ui = Ui::new(300., 200.);
+    let view = ui.mount(
+        column()
+            .child(button().id("plain").size(80., 30.).child(text("A")))
+            .child(
+                button()
+                    .id("bordered")
+                    .size(80., 30.)
+                    .border(1.)
+                    .child(text("B")),
+            ),
+    );
+    settle(&mut ui);
+    for id in ["plain", "bordered"] {
+        let node = view.find(id).unwrap();
+        let resting = match ui.scene.borrow().kind(node) {
+            NodeKind::Panel { quad, .. } => quad.clone(),
+            other => panic!("{id}: {other:?}"),
+        };
+        press(&mut ui, Key::Tab, Modifiers::default());
+        assert_eq!(ui.input.focused(), Some(node), "{id} tabbed to");
+        let scene = ui.scene.borrow();
+        let NodeKind::Panel { quad, .. } = scene.kind(node) else {
+            unreachable!()
+        };
+        if cfg!(target_os = "linux") {
+            let outline = quad.outline.expect("an outline");
+            assert_eq!((outline.width, outline.offset), (2., -2.), "{id}");
+            assert_eq!(quad.border_width, resting.border_width, "{id}");
+            assert_eq!(quad.border_over, resting.border_over, "{id}");
+        } else {
+            assert_eq!(quad.outline, None, "{id}");
+            assert_ne!(*quad, resting, "{id}: the ring drawn");
+        }
+    }
+}

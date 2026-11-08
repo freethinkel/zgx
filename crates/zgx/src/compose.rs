@@ -2122,6 +2122,11 @@ pub(crate) const OVERLAY: OverlayLook = if cfg!(target_os = "linux") {
 /// no layout room), so focusing never moves its content; otherwise it
 /// colours the control's own border. (Made when first focused.)
 fn focus_ring(styles: &Styles) -> fn() -> Styles {
+    // GNOME draws keyboard focus as an outline inset over the control,
+    // bordered or not (`focus_inset`).
+    if cfg!(target_os = "linux") {
+        return || widget_style(|w| &w.focus_inset);
+    }
     match bordered(styles) {
         true => || widget_style(|w| &w.focus_recolor),
         false => || widget_style(|w| &w.focus_ring),
@@ -4383,6 +4388,10 @@ struct WidgetStyles {
     /// so focusing moves nothing; with one, its border recoloured.
     focus_ring: Styles,
     focus_recolor: Styles,
+    /// GNOME's focus (libadwaita's `focus-ring`): an outline 2 wide inset
+    /// over the control's edge (offset −2), its corners the control's.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    focus_inset: Styles,
     menu_focus_recolor: Styles,
     menu_item: Styles,
     menu_hover: Styles,
@@ -4403,6 +4412,10 @@ impl WidgetStyles {
                 .border_color(tok::FOCUS_RING)
                 .border_over(true),
             focus_recolor: Styles::new().border_color(tok::FOCUS_RING),
+            focus_inset: Styles::new()
+                .outline_width(2.)
+                .outline_color(tok::FOCUS_RING)
+                .outline_offset(-2.),
             menu_focus_recolor: Styles::new()
                 .bg(tok::MENU_HOVER)
                 .border_color(tok::FOCUS_RING),
