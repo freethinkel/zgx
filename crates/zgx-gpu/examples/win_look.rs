@@ -42,9 +42,12 @@ fn cell(
     gpu.set_scale_factor(scale);
     let mut ui = Ui::new(CELL.0, CELL.1);
     gpu.install_text(&mut ui.scene.borrow_mut());
-    zgx::theme::Themes::of(&ui.runtime)
-        .set(theme)
-        .expect("a built-in theme");
+    let themes = zgx::theme::Themes::of(&ui.runtime);
+    themes.set(theme).expect("a built-in theme");
+    // The system's colours, as zgx-desktop sets them there.
+    if cfg!(target_os = "linux") {
+        themes.set_system_tokens(zgx::theme::linux_look());
+    }
     let view = build(&ui);
     let view = ui.mount(
         column()
