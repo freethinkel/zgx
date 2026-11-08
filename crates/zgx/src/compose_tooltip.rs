@@ -9,7 +9,6 @@ use crate::{
     compose::{Placement, PlacementEdge, PlacementSide, TaskRunner, TaskToken, View},
     input::{EventPhase, InputEvent, Key},
     style::{Styled, Styles},
-    theme::tok,
     widgets::WeakUi,
 };
 use std::{
@@ -160,7 +159,9 @@ fn wrap(anchor: View, tip: Tooltip) -> View {
             interactive,
             delay,
         } = tip;
-        let delay = delay.unwrap_or(Duration::from_millis(300));
+        let look = &crate::compose::OVERLAY;
+        let delay = delay.unwrap_or(look.tooltip_delay);
+        let (reshow_within, reshow_delay) = look.tooltip_reshow;
         // A text tip describes the view to assistive technology, which
         // doesn't see the tip itself; a view tip is the app's to name.
         let description = match &content {
@@ -177,15 +178,19 @@ fn wrap(anchor: View, tip: Tooltip) -> View {
                     true => panel.py(above),
                     false => panel.pt(above).pb(below),
                 };
-                panel
+                let panel = panel
                     .max_w(320.)
-                    .bg(tok::POPOVER_BG)
-                    .border(0.5)
-                    .border_color(tok::BORDER)
+                    .bg(look.tooltip_bg)
+                    .border(look.tooltip_border.0)
+                    .border_color(look.tooltip_border.1)
                     .rounded(look.tooltip_radius)
-                    .text_size(look.tooltip_font_size)
-                    .text_wrap(true)
-                    .child(crate::compose::text(text))
+                    .text_size(look.tooltip_font_size);
+                match look.tooltip_text {
+                    Some(color) => panel.text_color(color),
+                    None => panel,
+                }
+                .text_wrap(true)
+                .child(crate::compose::text(text))
             }
         };
         let open = runtime.signal(false);
@@ -323,15 +328,20 @@ fn wrap(anchor: View, tip: Tooltip) -> View {
                     match cx.event {
                         InputEvent::PointerEnter if cx.target == cx.current_target => {
                             over_anchor.set(true);
-                            let now = shown.get()
-                                || TOOLTIPS.with(|t| {
-                                    let (count, last) = t.get();
-                                    count > 0
-                                        || last.is_some_and(|at| {
-                                            crate::clock::since(at) < Duration::from_secs(1)
-                                        })
-                                });
-                            if now || runner.is_none() {
+                            // Back while it shows, or another just showed: a
+                            // reshow, at once or after its own wait.
+                            let reshow = TOOLTIPS.with(|t| {
+                                let (count, last) = t.get();
+                                count > 0
+                                    || last
+                                        .is_some_and(|at| crate::clock::since(at) < reshow_within)
+                            });
+                            let now = shown.get() || (reshow && reshow_delay.is_zero());
+                            if reshow && !now && runner.is_some() {
+                                let set = set.clone();
+                                *waiting.borrow_mut() =
+                                    after(&runner, reshow_delay, move || set(true, false));
+                            } else if now || runner.is_none() {
                                 // Taking over from another (or back while it
                                 // fades): no fade in from nothing.
                                 waiting.borrow_mut().take();

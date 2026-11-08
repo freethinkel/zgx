@@ -2040,6 +2040,16 @@ pub(crate) struct OverlayLook {
     pub(crate) tooltip_padding: (f32, f32, f32),
     pub(crate) tooltip_radius: crate::theme::Themed<f32>,
     pub(crate) tooltip_font_size: crate::theme::Themed<f32>,
+    /// A text tooltip's panel, its text (`None`: inherited) and its border
+    /// (width, colour).
+    pub(crate) tooltip_bg: crate::theme::Themed<crate::scene::Color>,
+    pub(crate) tooltip_text: Option<crate::theme::Themed<crate::scene::Color>>,
+    pub(crate) tooltip_border: (f32, crate::theme::Themed<crate::scene::Color>),
+    /// How long the pointer rests on a view before its tooltip shows; and
+    /// within how long of another tooltip closing (or while one shows) the
+    /// next waits instead, and how long (zero: none).
+    pub(crate) tooltip_delay: std::time::Duration,
+    pub(crate) tooltip_reshow: (std::time::Duration, std::time::Duration),
 }
 /// zgx's own.
 pub(crate) const BUILT_IN_OVERLAY: OverlayLook = OverlayLook {
@@ -2055,6 +2065,12 @@ pub(crate) const BUILT_IN_OVERLAY: OverlayLook = OverlayLook {
     tooltip_padding: (8., 4., 4.),
     tooltip_radius: crate::theme::Themed::Token(tok::RADIUS_SM.0),
     tooltip_font_size: crate::theme::Themed::Token(tok::FONT_SIZE_XS.0),
+    tooltip_bg: crate::theme::Themed::Token(tok::POPOVER_BG.0),
+    tooltip_text: None,
+    tooltip_border: (0.5, crate::theme::Themed::Token(tok::BORDER.0)),
+    // 300 ms, AppKit's; once one shows, the next at once within a second.
+    tooltip_delay: std::time::Duration::from_millis(300),
+    tooltip_reshow: (std::time::Duration::from_secs(1), std::time::Duration::ZERO),
 };
 /// GNOME's, as libadwaita draws its popover menus and popovers
 /// (`_common.scss`, `widgets/_menus.scss`, `_popovers.scss`): a menu's
@@ -2073,7 +2089,27 @@ pub(crate) const LINUX_OVERLAY: OverlayLook = OverlayLook {
     popover_radius: crate::theme::Themed::Value(15.),
     popover_padding: 8.,
     shortcut_gap: 12.,
-    ..BUILT_IN_OVERLAY
+    // A tooltip as libadwaita's (`widgets/_tooltip.scss`): dark and
+    // translucent in either scheme, white text, a 1 border of white at 10%,
+    // padded 10 by 6, rounded 9, its text the body's less a step; shown
+    // after 500 ms (GTK's `HOVER_TIMEOUT`), and within 500 ms of another
+    // closing after 60 (`BROWSE_DISABLE_TIMEOUT`, `BROWSE_TIMEOUT`).
+    tooltip_padding: (10., 6., 6.),
+    tooltip_radius: crate::theme::Themed::Value(9.),
+    tooltip_font_size: crate::theme::Themed::Token(tok::FONT_SIZE_SM.0),
+    tooltip_bg: crate::theme::Themed::Value(crate::scene::Color(0, 0, 6, 204)),
+    tooltip_text: Some(crate::theme::Themed::Value(crate::scene::Color(
+        255, 255, 255, 255,
+    ))),
+    tooltip_border: (
+        1.,
+        crate::theme::Themed::Value(crate::scene::Color(255, 255, 255, 26)),
+    ),
+    tooltip_delay: std::time::Duration::from_millis(500),
+    tooltip_reshow: (
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_millis(60),
+    ),
 };
 pub(crate) const OVERLAY: OverlayLook = if cfg!(target_os = "linux") {
     LINUX_OVERLAY
